@@ -2,6 +2,7 @@
  31/07/2023
 
 @author Leandro Paolo De Persiis
+
 """
 
 import io
@@ -98,7 +99,7 @@ def custom_standardization(input_data):
 
 
 # Define the vocabulary size and the number of words in a sequence.
-vocab_size = 150000
+vocab_size = 100000
 sequence_length = 12
 
 # Set the number of negative samples per positive context.
