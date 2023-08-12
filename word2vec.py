@@ -22,6 +22,13 @@ SEED = 42
 AUTOTUNE = tf.data.AUTOTUNE
 BATCH_SIZE = 1024
 BUFFER_SIZE = 10000
+EMBEDDING_SIZE = 100
+MY_EMBEDDING_PATH = "C:\\Users\\lpdepersiis\\PycharmProjects\\autoencoderNlp\\embedding\\en\\glove\\"
+WITH_GLOVE = True  # se impostato a True utilizza come base l'embedding glove
+
+vocab_size = 100000 # vocabulary size
+sequence_length = 10 # number of words in a sequence.
+num_ns = 4 # number of negative samples per positive context
 
 context_class = tf.reshape(tf.constant(2, dtype="int64"), (1, 1))
 negative_sampling_candidates = 2
@@ -72,10 +79,45 @@ def generate_training_data(sequences, window_size, num_ns, vocab_size, seed):
 
     return targets, contexts, labels
 
+def get_word_matrix():
+    """
+    Questa funzione ci serve per crearci un dizionario avente come indice la parola e come valore il vettore dell'embedding corrispondente
+    """
+    word_matrix = {}
+    with open(MY_EMBEDDING_PATH + 'glove.6B.'+str(EMBEDDING_SIZE)+'d.txt', 'r', encoding='UTF-8') as file_emb:
+        for row in file_emb: # leggo ogni riga del file di testo contenente l'embedding
+            row = row.split() # la divido nei suoi elementi
+            word_matrix[row[0]] = np.array(row[1:], dtype='float32') # il primo è la parola e sarà l'indice di questa voce, gli altri andranno a formare il vettore
+    return word_matrix
+
+
+def get_embedding_matrix(embeddings_index, word_index, dim_embeddings=EMBEDDING_SIZE):
+    """
+    Tramite questa funzione creiamo una matrice in cui le righe siano nello stesso ordine dell'indice ottenuto dal tokenizer
+    e che contenga solo i vettori relativi alle parole in esso contenute
+
+    :param embeddings_index: il dizionario, ottenuto dall'embedding, avente le parole come indice ed i vettori come valore
+    :param word_index:  La lista di parole ottenuta dal tokenizer
+    :param dim_embeddings: la lunghezza dei vettori dell'embedding che stiamo utilizzando
+    :return: la matrice dei vettori dell'embedding ordinata come il nostro indice
+    """
+    embedding_matrix = np.zeros((len(word_index) + 1,
+                                 dim_embeddings))  # creiamo la matrice di zeri avente tante righe quante sono le parole (più una) e tante colonne quante sono quelle dei vettori
+    print(embedding_matrix.shape)
+    num = 0
+    for word in word_index:  # Scorriamo le parole dell'indice del tokenizer
+        embedding_vector = embeddings_index.get(word)  # estraiamo il vettore corrispondente
+        if embedding_vector is not None:  # verifichiamo che esista (anche se il nostro dizionario è più piccolo di quello dell'embedding potrebbe contenere parole non presenti in esso)
+            # se la parola è presente andiamo avanti (se non è presente, in corrispondenza di questo indice, rimarrà il vettore formato da zeri)
+            embedding_matrix[num] = embedding_vector  # impostiamo nella matrice quella riga con il vettore corrispondente alla parola
+        num += 1
+    return embedding_matrix
+
 
 anni = range(2018, 2023)
 mesi = range(1, 13)
-nome_file_txt = 'articles-recent.txt'
+nome_file_txt = 'articles-'+str(anni[0])+ '_' +str(anni[-1])+'.txt'
+print("nome_file_txt:", nome_file_txt)
 with open(nome_file_txt, 'w', newline=None, encoding='UTF-8', errors='strict') as file_txt:
     for a in anni:
         for m in mesi:
@@ -97,13 +139,6 @@ def custom_standardization(input_data):
     lowercase = tf.strings.lower(input_data)
     return tf.strings.regex_replace(lowercase, '[%s]' % re.escape(string.punctuation), '')
 
-
-# Define the vocabulary size and the number of words in a sequence.
-vocab_size = 100000
-sequence_length = 12
-
-# Set the number of negative samples per positive context.
-num_ns = 4
 
 # Use the `TextVectorization` layer to normalize, split, and map strings to
 # integers. Set the `output_sequence_length` length to pad all samples to the
@@ -157,16 +192,33 @@ print(dataset)
 dataset = dataset.cache().prefetch(buffer_size=AUTOTUNE)
 print(dataset)
 
+embedding_matrix = []
+if WITH_GLOVE:
+    word_matrix = get_word_matrix()
+    embedding_matrix = get_embedding_matrix(word_matrix, inverse_vocab)
+    print("embedding_matrix:", embedding_matrix)
+    print(embedding_matrix[:3])
+
+
 class Word2Vec(tf.keras.Model):
-    def __init__(self, vocab_size, embedding_dim):
+    def __init__(self, vocab_size, embedding_dim, embedding_matrix):
         super(Word2Vec, self).__init__()
-        self.target_embedding = layers.Embedding(vocab_size,
-                                      embedding_dim,
-                                      input_length=1,
-                                      name="w2v_embedding")
-        self.context_embedding = layers.Embedding(vocab_size,
-                                       embedding_dim,
-                                       input_length=num_ns+1)
+        self.target_embedding = self.getEmbeddingLayer(vocab_size, embedding_dim, "w2v_embedding", 1, embedding_matrix=embedding_matrix, t='T')
+        self.context_embedding = self.getEmbeddingLayer(vocab_size, embedding_dim, "context_embedding", num_ns+1, embedding_matrix=embedding_matrix, t='C')
+
+    def getEmbeddingLayer(self, vocab_size, embedding_dim, name, input_length, embedding_matrix=None, t='C'):
+        if WITH_GLOVE and t=='T':
+            embedding_layer = layers.Embedding(vocab_size +1,
+                                          embedding_dim,
+                                          input_length=input_length,
+                                          weights=[embedding_matrix],
+                                          name=name)
+        else:
+            embedding_layer = layers.Embedding(vocab_size +1,
+                                          embedding_dim,
+                                          input_length=input_length,
+                                          name=name)
+        return embedding_layer
 
     def call(self, pair):
         target, context = pair
@@ -184,18 +236,20 @@ class Word2Vec(tf.keras.Model):
         return dots
 
 
-embedding_dim = 128
-word2vec = Word2Vec(vocab_size, embedding_dim)
+word2vec = Word2Vec(vocab_size, EMBEDDING_SIZE, embedding_matrix)
 word2vec.compile(optimizer='adam',
                  loss=tf.keras.losses.CategoricalCrossentropy(from_logits=True),
                  metrics=['accuracy'])
 
-word2vec.fit(dataset, epochs=20) #, callbacks=[tensorboard_callback])
+word2vec.fit(dataset, epochs=22) #, callbacks=[tensorboard_callback])
 
 weights = word2vec.get_layer('w2v_embedding').get_weights()[0]
 vocab = vectorize_layer.get_vocabulary()
 
-with open('embedding_new.txt', 'w', encoding='utf-8') as emb:
+emb_with_glove = ''
+if WITH_GLOVE:
+    emb_with_glove = '_with_glove'
+with open('embedding_'+str(anni[0])+ '_' +str(anni[-1])+ emb_with_glove +'.txt', 'w', encoding='utf-8') as emb:
     for index, word in enumerate(vocab):
         if index == 0:
             continue  # skip 0, it's padding.
