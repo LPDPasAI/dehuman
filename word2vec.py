@@ -26,6 +26,13 @@ EMBEDDING_SIZE = 100
 MY_EMBEDDING_PATH = "C:\\Users\\lpdepersiis\\PycharmProjects\\autoencoderNlp\\embedding\\en\\glove\\"
 WITH_GLOVE = True  # se impostato a True utilizza come base l'embedding glove
 
+YEARS_FROM = 1981
+YEARS_TO = 1985
+# I due parametri seguenti determinano l'origine dei dati
+ARTICLES_SOCIAL = 'FILE' # Con SOCIAL oppure ARTICLES viene prima creato un file a partire da queste raccolte. YEARS_FROM e YEARS_TO sono utilizzati solo se si imposta ARTICLES
+# se ARTICLES_SOCIAL è impostato a FILE, non verrà creato un nuovo file in base a SOCIAL o ARTICLES, ma utilizzato questo file direttamente
+FILE = 'social-2019_2021.txt' # Impostando un file non viene fatta la creazione di un file in base a SOCIAL o ARTICLES, ma viene utilizzato questo file direttamente
+
 vocab_size = 100000 # vocabulary size
 sequence_length = 10 # number of words in a sequence.
 num_ns = 4 # number of negative samples per positive context
@@ -43,7 +50,7 @@ def generate_training_data(sequences, window_size, num_ns, vocab_size, seed):
 
     # Build the sampling table for `vocab_size` tokens.
     sampling_table = tf.keras.preprocessing.sequence.make_sampling_table(vocab_size)
-
+    context_class = tf.constant([1], dtype="int64")
     # Iterate over all sequences (sentences) in the dataset.
     for sequence in tqdm.tqdm(sequences):
 
@@ -114,22 +121,54 @@ def get_embedding_matrix(embeddings_index, word_index, dim_embeddings=EMBEDDING_
     return embedding_matrix
 
 
-anni = range(2018, 2023)
-mesi = range(1, 13)
-nome_file_txt = 'articles-'+str(anni[0])+ '_' +str(anni[-1])+'.txt'
-print("nome_file_txt:", nome_file_txt)
-with open(nome_file_txt, 'w', newline=None, encoding='UTF-8', errors='strict') as file_txt:
-    for a in anni:
-        for m in mesi:
-            nome_file = str(a) + '-' + str(m) + '-articles'
-            with open(nome_file + ".csv", 'r', newline=None, encoding='UTF-8', errors='ignore') as file_nyt:
-                reader = csv.reader(file_nyt)
-                for r in reader:
-                    if r is not None and len(r)>2 and len(r[1]) > 50:
-                        file_txt.write(r[1] + " \n ")
+def get_articles(anno_inizio, anno_fine):
+    anni = range(anno_inizio, anno_fine+1)
+    mesi = range(1, 13)
+    nome_file_txt = 'articles-'+str(anni[0])+ '_' +str(anni[-1])+'.txt'
+    print("Scrittura file:", nome_file_txt)
+    csv.field_size_limit(131072 * 2) # impostiamo una lunghezza del campo maggiore, perché alcuni articoli superano la lunghezza di default
+    with open(nome_file_txt, 'w', newline=None, encoding='UTF-8', errors='strict') as file_txt:
+        for a in anni:
+            for m in mesi:
+                nome_file = str(a) + '-' + str(m) + '-articles'
+                with open(nome_file + ".csv", 'r', newline=None, encoding='UTF-8', errors='ignore') as file_nyt:
+                    reader = csv.reader(file_nyt)
+                    for r in reader:
+                        if r is not None and len(r)>2 and len(r[1]) > 50:
+                            file_txt.write(r[1] + " \n ")
+    print("Completato file " + nome_file_txt)
+    return nome_file_txt
 
-print("Completato file " + nome_file_txt)
-# path_to_file = tf.keras.utils.get_file(nome_file + ".txt", 'file:' + nome_file + ".txt")
+
+def get_social():
+    nome_file_txt = 'social-2019_2021.txt'
+    print("Scrittura file:", nome_file_txt)
+    # files = ['fb_2019_jan_may.csv', 'fb_2019_june_dec.csv', 'fb_2020_jan_may.csv', 'fb_2020_june_dec.csv', 'fb_2021_jan_may.csv', 'fb_2021_june_dec.csv', 'ig_2019.csv', 'ig_2020.csv', 'ig_2021.csv']
+    files = ['fb_2019_jan_may.csv', 'fb_2019_june_dec.csv', 'fb_2020_jan_may.csv', 'fb_2020_june_dec.csv', 'fb_2021_jan_may.csv', 'fb_2021_june_dec.csv']
+    # files = ['ig_2019.csv', 'ig_2020.csv', 'ig_2021.csv']
+
+    csv.field_size_limit(131072 * 2) # impostiamo una lunghezza del campo maggiore
+    with open(nome_file_txt, 'w', newline=None, encoding='UTF-8', errors='strict') as file_txt:
+        for nome_file in files:
+            with open(nome_file, 'r', newline=None, encoding='UTF-8', errors='ignore') as file_social:
+                reader = csv.DictReader(file_social)
+                for r in reader:
+                    if r is not None and len(r)>2:
+                        if nome_file.startswith("fb_"):
+                            file_txt.write(r['Message'] + " \n ")
+                        if nome_file.startswith("ig_"):
+                            file_txt.write(r['Description'] + r['Image Text'] +  " \n ")
+    print("Completato file " + nome_file_txt)
+    return nome_file_txt
+
+
+nome_file_txt = ''
+if ARTICLES_SOCIAL == 'SOCIAL':
+    nome_file_txt = get_social()
+elif ARTICLES_SOCIAL == 'ARTICLES':
+    nome_file_txt = get_articles(YEARS_FROM, YEARS_TO)
+else:
+    nome_file_txt = FILE
 
 text_ds = tf.data.TextLineDataset(nome_file_txt).filter(lambda x: tf.cast(tf.strings.length(x), bool))
 
