@@ -27,9 +27,9 @@ print("\nCaricamento embedding.\n Attendere...\n")
 
 model = KeyedVectors.load_word2vec_format(MY_EMBEDDING_PATH, binary=False, no_header=True, encoding='utf-8', unicode_errors='ignore')
 
-def get_similar(word, model=model, limite=0.5):
+def get_similar(word, model=model, limite=0.5, num_word=500):
     print(f'Parole più simili a {word}: ')
-    vicine = model.most_similar(word, topn=500)
+    vicine = model.most_similar(word, topn=num_word)
     if vicine[0][1] <= limite: # stampa almeno la prima
         print(vicine[0][0], vicine[0][1])
     res = []
@@ -60,13 +60,20 @@ def vad_mean(lexicon, words: list):
     v_p = 0
     a_p = 0
     d_p = 0
+    v_pr = 0
+    a_pr = 0
+    d_pr = 0
 
     n = 0
     t = 0
+    tr = 0
+    sum_num = int((len(words) + 1) * len(words) / 2)
+    pos = 0
     for w in words:
+        pos += 1
         print(w)
         vad = lexicon.get(w[0])
-        print("vad:", vad)
+        print(n, "vad:", vad)
         if vad != None and len(vad) > 0:
             n += 1
             t += w[1]
@@ -77,6 +84,15 @@ def vad_mean(lexicon, words: list):
             v_p += vad[0] * w[1]
             a_p += vad[1] * w[1]
             d_p += vad[2] * w[1]
+
+            rank_ratio = (len(words) - pos) / sum_num
+            rank_ratio = (w[1] + rank_ratio) / 2
+            tr += rank_ratio
+            print(rank_ratio, tr)
+            v_pr += vad[0] * rank_ratio
+            a_pr += vad[1] * rank_ratio
+            d_pr += vad[2] * rank_ratio
+
     v = v / n
     a = a / n
     d = d / n
@@ -84,6 +100,9 @@ def vad_mean(lexicon, words: list):
     a_p = a_p / t
     d_p = d_p / t
 
+    v_pr = v_pr / tr
+    a_pr = a_pr / tr
+    d_pr = d_pr / tr
     #print("n:", n)
     #print("t:", t)
     print("valence:", v)
@@ -92,7 +111,9 @@ def vad_mean(lexicon, words: list):
     print("valence weighed:", v_p)
     print("arousal weighed:", a_p)
     print("dominance weighed:", d_p)
-
+    print("valence rank weighed:", v_pr)
+    print("arousal rank weighed:", a_pr)
+    print("dominance rank weighed:", d_pr)
 
 print("          Ricerca parole vicine     ")
 print("\nVengono mostrate le 500 parole con vettore più vicino a quello della parola indicata ")
@@ -101,6 +122,7 @@ print("Rispondere con - per terminare")
 
 richiesta = '+'
 limite_d = 0.01
+num_parole = 100
 while richiesta != '-':
     richiesta = input("\nParola: ")
     try:
@@ -110,7 +132,7 @@ while richiesta != '-':
         elif richiesta == 'limite' or richiesta == '<limite>':
             limite_d = float( input("Nuovo limite: "))
         else:
-            similar = get_similar(richiesta, limite=limite_d)
+            similar = get_similar(richiesta, limite=limite_d, num_word=num_parole)
             vad_mean(lexicon, similar)
 
     except Exception as e:
