@@ -20,6 +20,8 @@ MY_EMBEDDING_PATH = "C:\\Users\\lpdepersiis\\PycharmProjects\\embedding_analysis
 # MY_EMBEDDING_PATH = "C:\\Users\\lpdepersiis\\PycharmProjects\\embedding_analysis\\dehuman\\embedding_2018_2022_with_glove.txt"
 # MY_EMBEDDING_PATH = "C:\\Users\\lpdepersiis\\PycharmProjects\\autoencoderNlp\\embedding\\en\\glove\\glove.6B.100d.txt"
 PATH_LEXICON = "NRC-VAD-Lexicon.txt"
+limite_d = 0.01
+num_parole = 100
 
 print(MY_EMBEDDING_PATH)
 
@@ -92,37 +94,80 @@ def vad_mean(lexicon, words: list):
             v_pr += vad[0] * rank_ratio
             a_pr += vad[1] * rank_ratio
             d_pr += vad[2] * rank_ratio
+    if n> 0 and t > 0 and tr > 0:
+        v = v / n
+        a = a / n
+        d = d / n
+        v_p = v_p / t
+        a_p = a_p / t
+        d_p = d_p / t
 
-    v = v / n
-    a = a / n
-    d = d / n
-    v_p = v_p / t
-    a_p = a_p / t
-    d_p = d_p / t
-
-    v_pr = v_pr / tr
-    a_pr = a_pr / tr
-    d_pr = d_pr / tr
-    #print("n:", n)
-    #print("t:", t)
-    print("valence:", v)
-    print("arousal:", a)
-    print("dominance:", d)
-    print("valence weighed:", v_p)
-    print("arousal weighed:", a_p)
-    print("dominance weighed:", d_p)
-    print("valence rank weighed:", v_pr)
-    print("arousal rank weighed:", a_pr)
-    print("dominance rank weighed:", d_pr)
+        v_pr = v_pr / tr
+        a_pr = a_pr / tr
+        d_pr = d_pr / tr
+        #print("n:", n)
+        #print("t:", t)
+        print("valence:", v)
+        print("arousal:", a)
+        print("dominance:", d)
+        print("valence weighed:", v_p)
+        print("arousal weighed:", a_p)
+        print("dominance weighed:", d_p)
+        print("valence rank weighed:", v_pr)
+        print("arousal rank weighed:", a_pr)
+        print("dominance rank weighed:", d_pr)
+        return v, a, d, v_p, a_p, d_p, v_pr, a_pr, d_pr
+    else:
+        print(f"Valutazione non possibile per la parola indicata, in quanto nessuna delle parole vicine trovate è presente nel lexicon ")
+        return 0,0,0,0,0,0,0,0,0
 
 print("          Ricerca parole vicine     ")
-print("\nVengono mostrate le 500 parole con vettore più vicino a quello della parola indicata ")
-print("\nIndicare la parola per la quale si cercano i vettori più vicini ")
+print(f"\nVengono mostrate le {num_parole} parole con vettore più vicino a quello della parola indicata ")
+
+print(f"Ora viene effettuato in automatico il calcolo sulle parole della lista label ")
+
+labels = ['lgbt', 'lgbtq', 'lgbtqia', 'lgbtq2', 'glbt', 'gay', 'homosexual', 'queer', 'lesbian', 'bisexual',
+         'androgyne', 'demisexual', 'enby', 'femme', 'folx', 'ftm', 'neutral', 'heteroflexible', 'intersectionality',
+         'intersex', 'misgender', 'mtf', 'non-binary', 'panromantic', 'pansexual', 'passing', 'polyamory', 'qpoc',
+         'questioning', 'straight', 'terfs', 'third-gender', 'two-spirit', 'trans', 'transfeminine', 'transgender',
+         'transmasculine', 'transition', 'transvestite', 'wlw', 'womxn', 'womyn', 'zi', 'hir']
+
+print("   Eliminazione parole della lista label non presenti nell'embedding   ")
+non_presenti = []
+for t in labels:
+    try:
+        v = model[t]
+        if set(v) == {0.}:
+            non_presenti.append(t)
+            print("Rimosso", t, v)
+
+    except:
+        non_presenti.append(t)
+        print("Rimosso", t)
+
+for t in non_presenti:
+    labels.remove(t)
+
+print("Parole rimaste:", labels)
+
+nome_file_csv_medie = "lexicon_means_target.csv"
+with open(nome_file_csv_medie, "w", newline='', encoding='UTF-8', errors='ignore') as file:
+    writer = csv.writer(file)
+    writer.writerow(["word", "valence", "arousal", "dominance", "valence_weighed", "arousal_weighed", "dominance_weighed", "valence_rank_weighed", "arousal_rank_weighed", "dominance_rank_weighed"])
+    for p in labels:
+        similar = get_similar(p, limite=limite_d, num_word=num_parole)
+        v, a, d, v_p, a_p, d_p, v_pr, a_pr, d_pr = vad_mean(lexicon, similar)
+        if(set([v, a, d, v_p, a_p, d_p, v_pr, a_pr, d_pr])!={0}):
+            writer.writerow([p, v, a, d, v_p, a_p, d_p, v_pr, a_pr, d_pr])
+
+print("\nCompletata scrittura del file", nome_file_csv_medie)
+
+print("\nPer effettuare le stesse valutazioni su altre parole ")
+print("scrivere la parola per la quale si cercano i vettori più vicini ")
 print("Rispondere con - per terminare")
 
 richiesta = '+'
-limite_d = 0.01
-num_parole = 100
+
 while richiesta != '-':
     richiesta = input("\nParola: ")
     try:
