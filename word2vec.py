@@ -56,6 +56,7 @@ def print_time(ms_iniziali=ms_iniz, ms_az_prec=ms_prec):
 # and vocabulary size.
 def generate_training_data(sequences, window_size, num_ns, vocab_size, seed):
     # Elements of each training example are appended to these lists.
+    print("Numero di sequences:", len(sequences))
     targets, contexts, labels = [], [], []
 
     # Build the sampling table for `vocab_size` tokens.
@@ -63,7 +64,7 @@ def generate_training_data(sequences, window_size, num_ns, vocab_size, seed):
     context_class = tf.constant([1], dtype="int64")
     # Iterate over all sequences (sentences) in the dataset.
     for sequence in tqdm.tqdm(sequences):
-
+        # print("*************** seq:", sequence)
         # Generate positive skip-gram pairs for a sequence (sentence).
         positive_skip_grams, _ = tf.keras.preprocessing.sequence.skipgrams(
             sequence,
@@ -86,13 +87,19 @@ def generate_training_data(sequences, window_size, num_ns, vocab_size, seed):
                 name="negative_sampling")
 
         # Build context and label vectors (for one target word)
-        context = tf.concat([tf.squeeze(context_class,1), negative_sampling_candidates], 0)
-        label = tf.constant([1] + [0]*num_ns, dtype="int64")
-
-        # Append each element from the training example to global lists.
-        targets.append(target_word)
-        contexts.append(context)
-        labels.append(label)
+        try:
+            context = tf.concat([tf.squeeze(context_class,1), negative_sampling_candidates], 0)
+            label = tf.constant([1] + [0]*num_ns, dtype="int64")
+            # print("############## target:", target_word, " context:", context)
+            # Append each element from the training example to global lists.
+            targets.append(target_word)
+            contexts.append(context)
+            labels.append(label)
+        except Exception as e:
+            try:
+                print("Exception " + str(e))
+            except:
+                print("Exception ")
 
     return targets, contexts, labels
 
@@ -343,11 +350,17 @@ def crea_embedding(text_ds=text_ds, vectorize_layer=vectorize_layer, inverse_voc
 
     dataset = tf.data.Dataset.from_tensor_slices(((targets, contexts), labels))
     dataset = dataset.shuffle(BUFFER_SIZE).batch(BATCH_SIZE, drop_remainder=True)
-    print(dataset)
+    print("dataset pre:", dataset)
 
     dataset = dataset.cache().prefetch(buffer_size=AUTOTUNE)
-    print(dataset)
-
+    print("dataset post:", dataset)
+    try:
+        print("cardinality dataset:", dataset.cardinality())
+        print("__sizeof__ dataset:", dataset.__sizeof__())
+        print("__len__ dataset:", dataset.__len__())
+        print("len dataset:", len(dataset))
+    except Exception as e:
+        print(e)
     embedding_matrix = []
     if WITH_GLOVE:
         word_matrix = get_word_matrix(nome_embedding_prec)
@@ -367,8 +380,8 @@ def crea_embedding(text_ds=text_ds, vectorize_layer=vectorize_layer, inverse_voc
 
     emb_with_glove = ''
     if WITH_GLOVE:
-        emb_with_glove = '_with_glove'
-    nome_embedding = 'embedding_'+str(YEARS_FROM)+ '_' +str(YEARS_TO)+ emb_with_glove+ str(passaggio) +'.txt'
+        emb_with_glove = 'with_glove_'
+    nome_embedding = 'embedding_'+str(YEARS_FROM)+ '_' +str(YEARS_TO)+ '_' + emb_with_glove+ str(passaggio) +'.txt'
     with open(nome_embedding, 'w', encoding='utf-8') as emb:
         with open("log_embedding.log", 'w', encoding='utf-8') as log:
             for index, word in enumerate(vocab):
@@ -386,7 +399,8 @@ if ARTICLES_SOCIAL != 'ARTICLES':
     ms_prec = print_time()
     nome_emb_prec = None
     inverse_vocabolary = inverse_vocab
-    for passaggio in range(0, 9, 2):
+    num_files = 1
+    for passaggio in range(0, 9, num_files):
         print("passaggio", passaggio)
         ms_prec = print_time()
         vectorize_layer = layers.TextVectorization(
@@ -397,7 +411,7 @@ if ARTICLES_SOCIAL != 'ARTICLES':
             vocabulary=inverse_vocabolary,
             output_sequence_length=sequence_length)
         nome_emb_prec = crea_embedding(vectorize_layer=vectorize_layer, inverse_vocab=inverse_vocab, vocab_size=vocab_size,
-                                       embedding_dim=EMBEDDING_SIZE, da=passaggio, num_max=2, nome_embedding_prec=nome_emb_prec)
+                                       embedding_dim=EMBEDDING_SIZE, da=passaggio, num_max=num_files, nome_embedding_prec=nome_emb_prec)
 else:
     crea_embedding(text_ds, vectorize_layer, inverse_vocab, vocab_size)
 
